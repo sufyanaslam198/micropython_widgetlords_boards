@@ -116,6 +116,46 @@ class Mod8AI:
         return reading
         
 
+    def read_single_checked(self, channel: int):
+        """Read one channel AND report whether the ADC actually responded.
+
+        The MCP3208 always drives a *null bit* LOW immediately above the 12
+        data bits.  In this 3-byte frame that null bit is ``buf[1] & 0x10``.  If
+        it reads HIGH the device did not respond -- the signature of a floating
+        MISO from an absent/unseated board or a dead bus -- so ``valid`` is
+        False and ``counts`` is meaningless.
+
+        Together with the normal 4-20 mA under-range check this catches both
+        failure rails: a MISO that floats high trips the null bit here; one that
+        floats low reads ~0 counts (under-range) at the application layer.
+
+        Returns ``(counts, valid)``.
+        """
+        channel = max(0, min(channel, 7))
+        cs = self._cs
+        buf = self._buf
+
+        cs.low()
+        self._spi.write_readinto(self._tx_frames[channel], buf)
+        cs.high()
+
+        counts = ((buf[1] & 0x0F) << 8) | buf[2]
+        valid = (buf[1] & 0x10) == 0
+        return counts, valid
+
+    def read_single_ma_checked(self, channel: int, zero_counts: int = 745,
+                               range_counts: int = 4095,
+                               range_ma: float = 20.0,
+                               zero_ma: float = 4.0):
+        """``read_single_ma()`` plus the null-bit validity flag.
+
+        Returns ``(ma, valid)``; ``ma`` is meaningless when ``valid`` is False
+        (the board did not respond).  Same scaling/args as read_single_ma().
+        """
+        counts, valid = self.read_single_checked(channel)
+        ma = (counts - zero_counts) * (range_ma - zero_ma) / (range_counts - zero_counts) + zero_ma
+        return ma, valid
+
     def read_all(self) -> list:
         """
         Read all 8 channels.
