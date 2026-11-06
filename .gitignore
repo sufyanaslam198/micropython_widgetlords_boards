@@ -1,0 +1,8 @@
+# Compiled Python and tool caches -- never committed.
+__pycache__/
+*.py[cod]
+*$py.class
+*.mpy
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
